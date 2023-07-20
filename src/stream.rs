@@ -1,5 +1,3 @@
-use rand::Rng;
-
 use crate::dist::str_score;
 use crate::mersenne::{nxt, rand_n, seed_mt};
 use crate::xor::xor_slice;
@@ -97,8 +95,7 @@ pub fn break_ctr_blocks(encrs: &[Vec<u8>]) -> Vec<Vec<u8>> {
     decr
 }
 
-pub fn mt19937(arr: &[u8], seed: u16) -> Vec<u8> {
-    let mut rng = rand::thread_rng();
+pub fn mt19937(arr: &[u8], seed: u16, rng: &mut impl rand::Rng) -> Vec<u8> {
     let prefix: Vec<u8> = (0..10).map(|_| rng.gen()).collect();
     let mut state = seed_mt(seed as u32);
     let _: Vec<_> = (0..prefix.len() / 4).map(|_| nxt(&mut state)).collect();
@@ -118,7 +115,7 @@ pub fn mt19937(arr: &[u8], seed: u16) -> Vec<u8> {
     res
 }
 
-pub fn get_mt19937_seed(f: impl Fn(&[u8]) -> Vec<u8>) -> Option<u16> {
+pub fn get_mt19937_seed(mut f: impl FnMut(&[u8]) -> Vec<u8>) -> Option<u16> {
     let arr = [b'A'; 14];
     let mut encr = f(&arr);
     xor_slice(&mut encr, &arr);

@@ -44,7 +44,7 @@ pub struct Server {
 impl Server {
     pub fn init() -> Self {
         Self {
-            privkey: dh::dh_keys(&p(), g(), &mut rand::thread_rng()).0,
+            privkey: dh::dh_keys(&p(), &g(), &mut rand::thread_rng()).1,
             credentials: HashMap::new(),
         }
     }
@@ -55,7 +55,10 @@ impl Server {
 
     pub fn identify(&self, email: &str) -> (BigUint, u128) {
         let (v, s) = self.credentials.get(email).expect("client not registered");
-        ((modsum(modmult(k(), v), &g().modpow(&self.privkey, &p()))), *s)
+        (
+            (modsum(modmult(k(), v), &g().modpow(&self.privkey, &p()))),
+            *s,
+        )
     }
 
     fn calc_u(&self, client_email: &str, client_pubkey: &BigUint) -> BigUint {
@@ -72,8 +75,6 @@ impl Server {
         let k = sha256(&s.to_bytes_be());
 
         let res = hmac(&k, &salt.to_be_bytes(), sha256);
-        println!("exp: {:?}", digest);
-        println!("prov {:?}", res);
         res == digest
     }
 }
@@ -87,7 +88,7 @@ pub struct Client {
 
 impl Client {
     pub fn init(email: String, password: String) -> Self {
-        let (privkey, pubkey) = dh::dh_keys(&p(), g(), &mut rand::thread_rng());
+        let (pubkey, privkey) = dh::dh_keys(&p(), &g(), &mut rand::thread_rng());
         Self {
             email,
             password,
@@ -138,7 +139,6 @@ impl Client {
         let k0 = &sha256(&0u8.to_be_bytes());
         hmac(k0, &salt.to_be_bytes(), sha256)
     }
-
 }
 
 #[cfg(test)]

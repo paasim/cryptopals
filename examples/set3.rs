@@ -73,7 +73,7 @@ fn ex20() -> String {
 fn ex24() -> String {
     let mut rng = rand::thread_rng();
     let key = rng.gen();
-    let encr = |arr: &[u8]| mt19937(arr, key);
+    let encr = |arr: &[u8]| mt19937(arr, key, &mut rng);
     let key_inferred = get_mt19937_seed(encr);
     format!("key: {}, inferred: {}", key, key_inferred.unwrap())
 }

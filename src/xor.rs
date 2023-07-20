@@ -110,8 +110,8 @@ mod tests {
         let hex1 = "1c0111001f010100061a024b53535009181c";
         let hex2 = "686974207468652062756c6c277320657965";
         let xor = "746865206b696420646f6e277420706c6179";
-        let mut bytes1 = from_hex(hex1).expect("should have been hex");
-        let bytes2 = from_hex(hex2).expect("should have been hex");
+        let mut bytes1 = from_hex(hex1);
+        let bytes2 = from_hex(hex2);
         xor_slice(&mut bytes1, &bytes2);
 
         assert_eq!(to_hex(&bytes1), xor)

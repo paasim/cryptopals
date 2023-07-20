@@ -1,4 +1,16 @@
-use crate::math::{un_xor_shl_and, un_xor_shr_and};
+pub fn un_xor_shl_and(mut x: u32, n: u32, and: u32) -> u32 {
+    for i in 0..=32 - n {
+        x ^= (x << n) & and & (1 << (i + n - 1));
+    }
+    x
+}
+
+pub fn un_xor_shr_and(mut x: u32, n: u32, and: u32) -> u32 {
+    for i in 0..=32 - n {
+        x ^= (x >> n) & and & (1 << 32 - n - i);
+    }
+    x
+}
 
 const N32: usize = 624;
 type MT32 = (usize, [u32; N32]);
@@ -133,7 +145,8 @@ pub fn guess_state(rands: &[u32]) -> Vec<u32> {
     const D: u32 = 0xFFFFFFFF;
     const B: u32 = 0x9D2C5680;
     const C: u32 = 0xEFC60000;
-    rands.iter()
+    rands
+        .iter()
         .map(|y4| {
             let y3 = un_xor_shr_and(*y4, L, D);
             let y2 = un_xor_shl_and(y3, T, C);
@@ -146,8 +159,38 @@ pub fn guess_state(rands: &[u32]) -> Vec<u32> {
 #[cfg(test)]
 mod tests {
     use rand::Rng;
-
     use super::*;
+
+    #[test]
+    fn un_xor_shl_works() {
+        let mut rng = rand::thread_rng();
+        let s: u32 = 7;
+        let t: u32 = 15;
+        let b: u32 = 0x9D2C5680;
+        let c: u32 = 0xEFC60000;
+        for _ in 0..10000 {
+            let x: u32 = rng.gen();
+            let y = x ^ ((x << s) & b);
+            assert_eq!(un_xor_shl_and(y, s, b), x);
+            let y = x ^ ((x << t) & c);
+            assert_eq!(un_xor_shl_and(y, t, c), x);
+        }
+    }
+
+    #[test]
+    fn un_xor_shr_works() {
+        let mut rng = rand::thread_rng();
+        let u: u32 = 11;
+        let d: u32 = 0xFFFFFFFF;
+        let l: u32 = 18;
+        for _ in 0..1000 {
+            let x: u32 = rng.gen();
+            let y = x ^ ((x >> u) & d);
+            assert_eq!(un_xor_shr_and(y, u, d), x);
+            let y = x ^ ((x >> l) & d);
+            assert_eq!(un_xor_shr_and(y, l, d), x);
+        }
+    }
 
     #[test]
     fn seeding_works() {

@@ -384,11 +384,7 @@ mod tests {
     #[test]
     fn detect_ecb_works() {
         let file = fs::read_to_string("data/8.txt").expect("file missing");
-        let hexes: Vec<_> = file
-            .lines()
-            .map(from_hex)
-            .collect::<Result<_, _>>()
-            .expect("invalid hexes");
+        let hexes: Vec<_> = file.lines().map(from_hex).collect();
         let mut vals: Vec<_> = hexes.iter().map(|l| detect_ecb(l, 16)).collect();
         vals.sort();
         // one is ecb

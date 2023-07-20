@@ -222,61 +222,39 @@ pub fn hmac<const N: usize>(key: &[u8], msg: &[u8], h: fn(&[u8]) -> [u8; N]) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::encode::{from_ascii, from_hex};
+    use crate::encode::{from_ascii, to_hex};
 
     #[test]
     fn md4_works() {
         let v = md4(&[]);
-        let exp: [u8; 16] = from_hex("31d6cfe0d16ae931b73c59d7e0c089c0")
-            .expect("not a hex string")
-            .try_into()
-            .expect("incorrect size");
-        assert_eq!(v, exp);
+        assert_eq!(to_hex(&v), "31d6cfe0d16ae931b73c59d7e0c089c0");
 
         let str = from_ascii("The quick brown fox jumps over the lazy dog");
         let v = md4(&str);
-        let exp: [u8; 16] = from_hex("1bee69a46ba811185c194762abaeae90")
-            .expect("not a hex string")
-            .try_into()
-            .expect("incorrect size");
-        assert_eq!(v, exp);
+        assert_eq!(to_hex(&v), "1bee69a46ba811185c194762abaeae90");
     }
 
     #[test]
     fn sha1_works() {
         let v = sha1(&[]);
-        let exp: [u8; 20] = from_hex("da39a3ee5e6b4b0d3255bfef95601890afd80709")
-            .expect("not a hex string")
-            .try_into()
-            .expect("incorrect size");
-        assert_eq!(v, exp);
+        let exp = "da39a3ee5e6b4b0d3255bfef95601890afd80709";
+        assert_eq!(to_hex(&v), exp);
 
         let str = from_ascii("The quick brown fox jumps over the lazy dog");
         let v = sha1(&str);
-        let exp: [u8; 20] = from_hex("2fd4e1c67a2d28fced849ee1bb76e7391b93eb12")
-            .expect("not a hex string")
-            .try_into()
-            .expect("incorrect size");
-        assert_eq!(v, exp);
+        let exp = "2fd4e1c67a2d28fced849ee1bb76e7391b93eb12";
+        assert_eq!(to_hex(&v), exp);
     }
 
     #[test]
     fn sha256_works() {
         let v = sha256(&[]);
-        let exp: [u8; 32] =
-            from_hex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
-                .expect("not a hex string")
-                .try_into()
-                .expect("incorrect size");
-        assert_eq!(v, exp);
+        let exp = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+        assert_eq!(to_hex(&v), exp);
 
         let str = from_ascii("abc");
         let v = sha256(&str);
-        let exp: [u8; 32] =
-            from_hex("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
-                .expect("not a hex string")
-                .try_into()
-                .expect("incorrect size");
-        assert_eq!(v, exp);
+        let exp = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+        assert_eq!(to_hex(&v), exp);
     }
 }

@@ -1,11 +1,13 @@
-use std::num::ParseIntError;
-
-pub fn from_hex(hex: &str) -> Result<Vec<u8>, ParseIntError> {
+pub fn from_hex(hex: &str) -> Vec<u8> {
     let mut bytes = vec![];
-    for i in 0..hex.len() / 2 {
-        bytes.push(u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16)?);
+    let m = hex.len() % 2;
+    if m == 1 {
+        bytes.push(u8::from_str_radix(&hex[0..1], 16).expect("not a base16 character"));
     }
-    Ok(bytes)
+    for i in (0..hex.len() / 2).map(|i| i * 2 + m) {
+        bytes.push(u8::from_str_radix(&hex[i..i + 2], 16).expect("not a base16 character"));
+    }
+    bytes
 }
 
 pub fn to_hex(bytes: &[u8]) -> String {
@@ -45,7 +47,7 @@ fn b64_parse(c: char) -> u8 {
         '+' => 62,
         '/' => 63,
         '=' => 0,
-        _ => panic!("received non-base64 character"),
+        c => panic!("{} is not a base64 character", c),
     }
 }
 
@@ -57,7 +59,7 @@ fn b64_render(b64: u8) -> char {
         62 => '+',
         63 => '/',
         64 => '=',
-        _ => panic!("received u8 larger than 64"),
+        _ => panic!("{} is larger than 64", b64),
     }
 }
 
@@ -154,20 +156,20 @@ mod tests {
     #[test]
     fn from_hex_works() {
         let bytes = from_hex("49276d");
-        assert_eq!(bytes, Ok(vec![4 * 16 + 9, 2 * 16 + 7, 6 * 16 + 13]));
+        assert_eq!(bytes, vec![4 * 16 + 9, 2 * 16 + 7, 6 * 16 + 13]);
     }
 
     #[test]
     fn to_hex_works() {
         let input = String::from("49276d");
-        let bytes = from_hex(&input).expect("invalid input");
+        let bytes = from_hex(&input);
         assert_eq!(input, to_hex(&bytes))
     }
 
     #[test]
     fn hex_to_base64_works() {
         let str = "49276d206b696c6c696e6720796f757220627261696e206c696b65206120706f69736f6e6f7573206d757368726f6f6d";
-        let bytes = from_hex(&str).expect("invalid input");
+        let bytes = from_hex(&str);
         let result = to_base64(&bytes);
         assert_eq!(
             result,

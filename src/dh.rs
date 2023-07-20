@@ -1,59 +1,99 @@
 use crate::digest::sha1;
-use crate::math::inv_egcd;
-use crate::prime::mr_prime;
+use crate::math::{crt, disc_log_incr, div, pollard_lambda};
+use crate::prime::factors_up_to;
 use num_bigint::{BigUint, RandBigInt};
 
-pub fn dh_keys(p: &BigUint, g: BigUint, r: &mut impl rand::Rng) -> (BigUint, BigUint) {
-    let privkey = r.gen_biguint_range(&2u8.into(), p);
+pub fn dh_keys(p: &BigUint, g: &BigUint, rng: &mut impl rand::Rng) -> (BigUint, BigUint) {
+    let privkey = rng.gen_biguint_range(&2u8.into(), p);
     let pubkey = g.modpow(&privkey, p);
-    (privkey, pubkey)
+    (pubkey, privkey)
 }
 
-pub fn dh_session_key(p: &BigUint, pb0: BigUint, priv1: &BigUint) -> [u8; 16] {
+pub fn dh_session_key(p: &BigUint, pb0: &BigUint, priv1: &BigUint) -> [u8; 16] {
     let s = pb0.modpow(priv1, p);
     let mut res = [0u8; 16];
     res.swap_with_slice(&mut sha1(&s.to_bytes_le())[..16]);
     res
 }
 
-pub fn rsa_keys(s: u32) -> (BigUint, BigUint, BigUint) {
-    let p = mr_prime(s, 5);
-    let q = mr_prime(s << 1, 5);
-    let n = p.clone() * q.clone();
-    let et = (p - 1u8) * (q - 1u8);
-    let mut e = 3u16;
-    let mut d = inv_egcd(e.into(), et.clone());
-    while d.is_none() {
-        e += 2;
-        d = inv_egcd(e.into(), et.clone());
+pub fn subgroups(
+    p: &BigUint,
+    q: &BigUint,
+    b: u32,
+    rng: &mut impl rand::Rng,
+) -> Vec<(usize, BigUint)> {
+    let pm1 = &(p - 1u8);
+    let j = pm1 / q;
+    let factors = factors_up_to(&j, 2usize.pow(b));
+    let mut orders = vec![];
+    let one = BigUint::from(1u8);
+    let fp: &BigUint = &factors
+        .iter()
+        .map(|(f, e)| BigUint::from(*f).pow(*e))
+        .product();
+    for (f, e) in factors {
+        let mut f = f;
+        if fp < q {
+            f = f.pow(e);
+        }
+        assert!(pm1 % f == 0u8.into());
+        let mut h = rng.gen_biguint_range(&1u8.into(), p).modpow(&(pm1 / f), p);
+        while h == one {
+            h = rng.gen_biguint_range(&1u8.into(), p).modpow(&(pm1 / f), p);
+        }
+        orders.push((f, h))
     }
-    let d = d.unwrap();
-    (e.into(), d, n)
+    orders
 }
 
-fn rsa(key: &BigUint, n: &BigUint, m: BigUint) -> BigUint {
-    m.modpow(key, &n)
+pub fn get_privkey_mod_from_crt(
+    subgroups: &[(usize, BigUint)],
+    p: &BigUint,
+    sign: impl Fn(&BigUint) -> BigUint,
+) -> Option<(BigUint, BigUint)> {
+    subgroups
+        .into_iter()
+        .map(|(f, h)| {
+            let f = BigUint::from(*f);
+            // log(h ^ x mod p) = x % r (when h is of order r)
+            let lhx = disc_log_incr(p, &f, h, &sign(h))?;
+            Some((lhx, f))
+        })
+        .collect::<Option<Vec<_>>>()
+        .map(|v| crt(&v))
 }
 
-pub fn rsa_msg(key: &BigUint, n: &BigUint, m: &[u8]) -> Vec<u8> {
-    let m = BigUint::from_bytes_be(m);
-    rsa(key, n, m).to_bytes_be()
+pub fn get_privkey_from_rem(
+    p: &BigUint,
+    q: &BigUint,
+    g: &BigUint,
+    y: &BigUint,
+    n: &BigUint,
+    r: &BigUint,
+) -> Option<BigUint> {
+    let g_ = &g.modpow(r, p);
+    let y_ = &div(y, &g.modpow(n, p), p)?;
+    let ul = (q - 1u8) / r;
+    let k = ul.bits() as u8 / 2;
+    let m = pollard_lambda(p, g_, y_, &0u8.into(), &ul, k, 4)?;
+    Some(n + m * r)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::encode::{from_ascii, from_hex, to_ascii};
+    use crate::encode::from_hex;
+    use crate::prime::{mr_prime, pq};
 
     #[test]
     fn gen_key_works() {
         let mut rng = rand::thread_rng();
         let p = 37u8.into();
-        let g = 5u8;
-        let (priv0, pb0) = dh_keys(&p, g.into(), &mut rng);
-        let (priv1, pb1) = dh_keys(&p, g.into(), &mut rng);
-        let s0 = dh_session_key(&p, pb1.clone(), &priv0);
-        let s1 = dh_session_key(&p, pb0.clone(), &priv1);
+        let g = 5u8.into();
+        let (pb0, priv0) = dh_keys(&p, &g, &mut rng);
+        let (pb1, priv1) = dh_keys(&p, &g, &mut rng);
+        let s0 = dh_session_key(&p, &pb1, &priv0);
+        let s1 = dh_session_key(&p, &pb0, &priv1);
         assert_eq!(s0, s1)
     }
 
@@ -70,13 +110,12 @@ bb9ed529077096966d670c354e4abc9804f1746c08ca237327fff
 fffffffffffff"
             .lines()
             .collect::<String>();
-        let p_bytes = from_hex(&p_str).expect("not a hexstring");
-        let p = BigUint::from_bytes_be(&p_bytes);
-        let g = 2u8;
-        let (priv0, pb0) = dh_keys(&p, g.into(), &mut rng);
-        let (priv1, pb1) = dh_keys(&p, g.into(), &mut rng);
-        let s0 = dh_session_key(&p, pb1.clone(), &priv0);
-        let s1 = dh_session_key(&p, pb0.clone(), &priv1);
+        let p = BigUint::from_bytes_be(&from_hex(&p_str));
+        let g = BigUint::from(2u8);
+        let (pb0, priv0) = dh_keys(&p, &g, &mut rng);
+        let (pb1, priv1) = dh_keys(&p, &g, &mut rng);
+        let s0 = dh_session_key(&p, &pb1, &priv0);
+        let s1 = dh_session_key(&p, &pb0, &priv1);
         assert_eq!(s0, s1)
     }
 
@@ -93,37 +132,55 @@ bb9ed529077096966d670c354e4abc9804f1746c08ca237327fff
 fffffffffffff"
             .lines()
             .collect::<String>();
-        let p_bytes = from_hex(&p_str).expect("not a hexstring");
+        let p_bytes = from_hex(&p_str);
         let p = BigUint::from_bytes_be(&p_bytes);
-        let g = 1u8;
-        let (priv0, _) = dh_keys(&p, g.into(), &mut rng);
-        let (_, pb1) = dh_keys(&p, g.into(), &mut rng);
-        let s0 = dh_session_key(&p, pb1.clone(), &priv0);
+        let g = BigUint::from(1u8);
+        let (_, priv0) = dh_keys(&p, &g, &mut rng);
+        let (pb1, _) = dh_keys(&p, &g, &mut rng);
+        let s0 = dh_session_key(&p, &pb1, &priv0);
         assert_eq!(s0, sha1(&[1])[..16]);
 
         let g = p.clone();
-        let (priv0, _) = dh_keys(&p, g.clone(), &mut rng);
-        let (_, pb1) = dh_keys(&p, g.into(), &mut rng);
-        let s0 = dh_session_key(&p, pb1.clone(), &priv0);
+        let (_, priv0) = dh_keys(&p, &g, &mut rng);
+        let (pb1, _) = dh_keys(&p, &g, &mut rng);
+        let s0 = dh_session_key(&p, &pb1, &priv0);
         assert_eq!(s0, sha1(&[0])[..16]);
 
         let g = p.clone() - 1u8;
-        let (priv0, pb0) = dh_keys(&p, g.clone(), &mut rng);
-        let (priv1, pb1) = dh_keys(&p, g.clone(), &mut rng);
-        println!("{} {} {} {}", priv0, pb0, priv1, pb1);
-        let s0 = dh_session_key(&p, pb1.clone(), &priv0);
+        let (_, priv0) = dh_keys(&p, &g, &mut rng);
+        let (pb1, _) = dh_keys(&p, &g, &mut rng);
+        let s0 = dh_session_key(&p, &pb1, &priv0);
         let e1 = &sha1(&[1])[..16];
         let eg = &sha1(&g.to_bytes_le())[..16];
         assert!((s0 == e1) | (s0 == eg));
     }
 
     #[test]
-    fn rsa_msg_works() {
-        let msg = from_ascii("This is a very serious message");
-        let (priv_key, pub_key, n) = rsa_keys(msg.len() as u32 * 8);
-        let encr = rsa_msg(&pub_key, &n, &msg);
-        assert!(!to_ascii(&encr).contains("This is a very serious message"));
-        let decr = rsa_msg(&priv_key, &n, &encr);
-        assert!(to_ascii(&decr).contains("This is a very serious message"));
+    fn get_privkey_from_crt_works() {
+        let mut rng = rand::thread_rng();
+        let p = &BigUint::parse_bytes(b"7199773997391911030609999317773941274322764333428698921736339643928346453700085358802973900485592910475480089726140708102474957429903531369589969318716771", 10).expect("not a number");
+        let q = &BigUint::parse_bytes(b"236234353446506858198510045061214171961", 10)
+            .expect("not a number");
+        let subs = subgroups(&p, &q, 16, &mut rng);
+
+        let privkey = rng.gen_biguint_range(&2u8.into(), q);
+        let sign = |msg: &BigUint| msg.modpow(&privkey, &p);
+        let (pk, _) = get_privkey_mod_from_crt(&subs, p, sign).expect("pk not found");
+        assert_eq!(pk, privkey);
+    }
+
+    #[test]
+    fn get_privkey_from_rem_works() {
+        let mut rng = rand::thread_rng();
+        let k = 5;
+        let (p, q) = &pq(1024, 256, k, &mut rng);
+        let privkey = rng.gen_biguint_range(&2u8.into(), &(q - 2u8));
+        let r = &mr_prime(236, k, &mut rng);
+        let n = &privkey % r;
+        assert_ne!(privkey, n); // not completely revealed by mod r
+        let g = &rng.gen_biguint_range(&2u8.into(), &(p - 2u8));
+        let y = &g.modpow(&privkey, &p);
+        let pk = get_privkey_from_rem(p, q, g, y, &n, r).expect("pk not found");
+        assert_eq!(privkey, pk);
     }
 }

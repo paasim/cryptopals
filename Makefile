@@ -1,4 +1,4 @@
-SETS := set1 set2 set3 set4 setx
+SETS := set1 set2 set3 set4 set5 set6 set8 setx
 EXAMPLES := $(patsubst set%, example%, $(SETS))
 FLAMEGRAPHS := $(patsubst set%, flamefraph%, $(SETS))
 
@@ -6,8 +6,8 @@ FLAMEGRAPHS := $(patsubst set%, flamefraph%, $(SETS))
 
 echo:
 	@echo make test: run tests
-	@echo make setx: get ouput for set x
-	@echo make flamegraph2: make flamegraph set3
+	@echo make examplex: get ouput for set x
+	@echo make flamegraphx: make flamegraph for set x
 
 test:
 	cargo test -r

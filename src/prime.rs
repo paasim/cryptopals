@@ -50,6 +50,24 @@ pub fn wheel_primes(limit: usize) -> Vec<usize> {
     primes
 }
 
+pub fn factors_up_to(n: &BigUint, limit: usize) -> Vec<(usize, u32)> {
+    let mut factors = vec![];
+    let primes = wheel_primes(limit);
+    let zero = BigUint::from(0u8);
+    let mut n = n.clone();
+    for p in primes {
+        let mut exp = 0;
+        while &n % p == zero {
+            n /= p;
+            exp += 1;
+        }
+        if exp > 0 {
+            factors.push((p, exp));
+        }
+    }
+    factors
+}
+
 fn fact_pow2(mut n: BigUint) -> (u32, BigUint) {
     let mut r = 0;
     while !n.bit(0) {
@@ -59,12 +77,13 @@ fn fact_pow2(mut n: BigUint) -> (u32, BigUint) {
     (r, n)
 }
 
-pub fn mr_prime(size: u32, k: usize) -> BigUint {
-    let mut rng = rand::thread_rng();
-    let mut n = BigUint::from(2u8).pow(size);
-    n += rng.gen_biguint_below(&n);
+pub fn mr_prime(size: u64, k: usize, rng: &mut impl rand::Rng) -> BigUint {
+    let mut n = rng.gen_biguint(size);
+    while n.bits() != size {
+        n = rng.gen_biguint(size);
+    }
     n.set_bit(0, true);
-    while !mrp_check(&n, k, &mut rng) {
+    while !mrp_check(&n, k, rng) {
         n += 2u8;
     }
     n
@@ -103,7 +122,7 @@ pub fn mrp_check<R: Rng>(n: &BigUint, k: usize, rng: &mut R) -> bool {
             continue;
         }
         for _ in 0..r - 1 {
-            x = (x.clone() * x) % n;
+            x = x.modpow(&2u8.into(), n);
             if x == one {
                 return false;
             }
@@ -116,10 +135,22 @@ pub fn mrp_check<R: Rng>(n: &BigUint, k: usize, rng: &mut R) -> bool {
     true
 }
 
+pub fn pq(p_bits: u64, q_bits: u64, k: usize, rng: &mut impl rand::Rng) -> (BigUint, BigUint) {
+    assert!(q_bits < p_bits - 3, "q must be << p");
+    let q = mr_prime(q_bits, k, rng);
+    let mut r = rng.gen_biguint(p_bits - q.bits()) << 1; // must be even
+    let mut p: BigUint = &q * &r + 1u8;
+
+    while p.bits() != p_bits || !mrp_check(&p, 1, rng) {
+        r = rng.gen_biguint(p_bits - q.bits()) << 1;
+        p = &q * &r + 1u8;
+    }
+    (p, q)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use num_traits::cast::ToPrimitive;
 
     #[test]
     fn wheel_factor_works() {
@@ -153,6 +184,18 @@ mod tests {
     }
 
     #[test]
+    fn factors_up_to_works() {
+        let mut n = BigUint::from(1u8);
+        n *= 2usize.pow(3);
+        n *= 17usize.pow(1);
+        n *= 103usize.pow(5);
+        n *= 241usize.pow(2);
+        n *= 251usize.pow(1);
+        let facts = factors_up_to(&n, 250);
+        assert_eq!(facts, vec![(2, 3), (17, 1), (103, 5), (241, 2)]);
+    }
+
+    #[test]
     fn fact_pow2_works() {
         let r = 17;
         let d = 1298731usize;
@@ -164,13 +207,26 @@ mod tests {
 
     #[test]
     fn mr_prime_works() {
-        let p = mr_prime(20, 5)
-            .to_usize()
-            .expect("prime does not fit into usize");
+        let mut rng = rand::thread_rng();
+        let p = mr_prime(20, 5, &mut rng)
+            .to_u64_digits()
+            .pop()
+            .expect("0 is not a prime") as usize;
         let w = wheel_primes(p + 1usize);
         assert!(w.contains(&p));
 
-        let p = mr_prime(512, 10);
+        let p = mr_prime(512, 10, &mut rng);
         assert!(p.bits() >= 512);
+    }
+
+    #[test]
+    fn pq_works() {
+        let mut rng = rand::thread_rng();
+        let k = 5;
+        let (p, q) = &pq(200, 100, k, &mut rng);
+        assert!(p.bits() == 200);
+        assert!(q.bits() == 100);
+        assert!(mrp_check(p, k, &mut rng));
+        assert!(mrp_check(q, k, &mut rng));
     }
 }

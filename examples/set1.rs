@@ -8,7 +8,7 @@ use std::fs;
 
 fn ex3() -> String {
     let str = "1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736";
-    let bytes = from_hex(str).expect("invalid hex string");
+    let bytes = from_hex(str);
     let mut v: Vec<_> = single_block_cipher(&bytes, 3)
         .into_iter()
         .map(|(_, c)| {
@@ -22,11 +22,7 @@ fn ex3() -> String {
 
 fn ex4() -> String {
     let file = fs::read_to_string("data/4.txt").expect("file missing");
-    let bytes_v: Vec<_> = file
-        .lines()
-        .map(|l| from_hex(l))
-        .collect::<Result<Vec<_>, _>>()
-        .expect("invalid hex string");
+    let bytes_v: Vec<_> = file.lines().map(from_hex).collect();
     let bytes_v_ref: Vec<_> = bytes_v.iter().collect();
     let mut v: Vec<_> = single_block_ciphers(&bytes_v_ref, 3)
         .into_iter()

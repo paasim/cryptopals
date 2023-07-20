@@ -1,5 +1,67 @@
-use crate::math::{multip, multip2, pow, INV};
 use crate::xor::xor_arr;
+
+const MOD8: u8 = 27;
+
+pub const fn multip2(x: u8) -> u8 {
+    if x >= 128 {
+        (x << 1) ^ MOD8
+    } else {
+        x << 1
+    }
+}
+
+pub const fn multip(mut x: u8, mut y: u8) -> u8 {
+    let mut res = 0;
+    while y > 0 {
+        if y % 2 == 1 {
+            res ^= x
+        }
+        x = multip2(x);
+        y >>= 1;
+    }
+    res
+}
+const fn precalc_multip(y: u8) -> [u8; 256] {
+    let mut res = [0; 256];
+    let mut i = 0;
+    while i < 255 {
+        i += 1;
+        res[i as usize] = multip(i, y);
+    }
+    res
+}
+pub const MULTIP2: [u8; 256] = precalc_multip(2);
+pub const MULTIP9: [u8; 256] = precalc_multip(9);
+pub const MULTIP11: [u8; 256] = precalc_multip(11);
+pub const MULTIP13: [u8; 256] = precalc_multip(13);
+pub const MULTIP14: [u8; 256] = precalc_multip(14);
+
+pub const fn pow(mut x: u8, mut n: u8) -> u8 {
+    let mut res = 1;
+    while n > 0 {
+        if n % 2 == 1 {
+            res = multip(res, x);
+        }
+        x = multip(x, x);
+        n /= 2;
+    }
+    res
+}
+
+pub const fn inv(x: u8) -> u8 {
+    pow(x, 254)
+}
+
+const fn precalc_inv() -> [u8; 256] {
+    let mut res = [inv(0); 256];
+    let mut i = 0;
+    while i < 255 {
+        i += 1;
+        res[i as usize] = inv(i);
+    }
+    res
+}
+pub const INV: [u8; 256] = precalc_inv();
 
 fn shift4(i: usize) -> usize {
     // i / 4 is current col
@@ -150,6 +212,30 @@ pub fn inv_aes(arr: &[u8; 16], key: &[u8; 16]) -> [u8; 16] {
 mod tests {
     use super::*;
     use crate::encode::block_from_ascii;
+
+    #[test]
+    fn multip_works() {
+        assert_eq!(multip(3, 2), 6);
+        assert_eq!(multip(0x53, 0xca), 0x01);
+    }
+
+    #[test]
+    fn pow_works() {
+        let x = 37;
+        assert_eq!(pow(x, 0), 1);
+        assert_eq!(pow(x, 1), x);
+        assert_eq!(pow(x, 3), multip(multip(x, x), x));
+        assert_eq!(pow(x, 255), 1);
+        assert_eq!(pow(42, 255), 1);
+    }
+
+    #[test]
+    fn inv_works() {
+        let x = 2u8.pow(6) + 2u8.pow(4) + 2 + 1;
+        let x_inv = inv(x);
+        assert_eq!(x_inv, 2u8.pow(7) + 2u8.pow(6) + 2u8.pow(3) + 2u8);
+        assert_eq!(multip(x, x_inv), 1);
+    }
 
     #[test]
     fn shift_rows_works() {
